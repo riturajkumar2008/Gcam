@@ -1,8 +1,8 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+import { getAuth } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 import { getFirestore } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-export const firebaseConfig = {
+const firebaseConfig = {
   apiKey: "AIzaSyCsn3iH_Pd7gZMjLRxesAQpWiz8yB1WCqk",
   authDomain: "privatecameracapture.firebaseapp.com",
   projectId: "privatecameracapture",
