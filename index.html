@@ -2,40 +2,18 @@
 <html lang="hi">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Gcam</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gcam by Ritikesh</title>
   <link rel="stylesheet" href="style.css" />
-  <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="p-4">
-  <div class="max-w-3xl mx-auto">
-    <h1 class="text-2xl font-bold mb-4">📸 Gcam</h1>
+  <h1 class="text-2xl font-bold mb-4">📸 Gcam</h1>
 
-    <div id="status-message" class="text-green-600 mb-2"></div>
-    <div id="error-box" class="hidden bg-red-100 text-red-700 p-2 mb-4">
-      <span id="error-text"></span>
-      <button onclick="closeErrorBox()">बंद करें</button>
-    </div>
+  <video id="camera-stream" autoplay playsinline class="w-full border mb-2"></video>
 
-    <section id="login-gate" class="mb-4">
-      <input id="admin-id" placeholder="एडमिन आईडी" class="border px-2 py-1">
-      <input id="admin-password" type="password" placeholder="पासवर्ड" class="border px-2 py-1">
-      <button id="login-button" class="bg-green-600 text-white px-3 py-1">लॉगिन</button>
-    </section>
-
-    <section id="capture-view">
-      <video id="camera-stream" autoplay playsinline class="w-full border mb-2"></video>
-      <button id="capture-button" class="bg-blue-600 text-white px-3 py-1">📷 कैप्चर</button>
-    </section>
-
-    <section id="dashboard-view" class="hidden mt-4">
-      <h2 class="text-xl font-semibold mb-2">🗂️ डैशबोर्ड</h2>
-      <div id="images-grid" class="grid grid-cols-2 gap-2"></div>
-    </section>
-
-    <footer class="mt-8 text-center text-xs text-gray-500">
-      ब्रांडेड द्वारा — rituraj _ cybersecurity | INDIAGPT • Gcam
-    </footer>
+  <div class="flex gap-2 mb-4">
+    <button id="login-button" class="bg-green-600 text-white px-3 py-1">Login</button>
+    <button id="capture-button" class="bg-blue-600 text-white px-3 py-1">📷 कैप्चर</button>
   </div>
 
   <script type="module" src="firebase.js"></script>
