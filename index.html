@@ -31,23 +31,25 @@
     </style>
     <!-- Firebase SDKs -->
     <script type="module">
-        // Firebase इम्पोर्ट
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { 
-            getAuth, 
-            signInAnonymously, 
-            signInWithCustomToken,
-            onAuthStateChanged
-        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { 
-            getFirestore, 
-            collection, 
-            query, 
-            onSnapshot, 
-            addDoc, 
-            serverTimestamp,
-            setLogLevel
-        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        // Firebase इम्पोर्ट 
+        <!-- Firebase SDKs -->
+<script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-analytics.js"></script>
+
+<script>
+  const firebaseConfig = {
+    apiKey: "AIzaSyCsn3iH_Pd7gZMjLRxesAQpWiz8yBWCqek",
+    authDomain: "privatecameracapture.firebaseapp.com",
+    projectId: "privatecameracapture",
+    storageBucket: "privatecameracapture.appspot.com",
+    messagingSenderId: "329027753992",
+    appId: "1:329027753992:web:6bb6b6bb54b7d8888252ed",
+    measurementId: "G-VF6F22ESHP"
+  };
+
+  const app = firebase.initializeApp(firebaseConfig);
+  const analytics = firebase.analytics();
+</script>
 
         // डिबगिंग के लिए लॉग स्तर सेट करें
         setLogLevel('Debug');
