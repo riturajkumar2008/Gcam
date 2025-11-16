@@ -1,4 +1,12 @@
 body {
-  font-family: 'Inter', sans-serif;
-  background-color: #f7f7f7;
+  font-family: sans-serif;
+  background-color: #f9fafb;
+  color: #111827;
+}
+video {
+  border-radius: 8px;
+}
+button {
+  border-radius: 4px;
+  cursor: pointer;
 }
