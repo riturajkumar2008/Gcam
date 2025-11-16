@@ -1,17 +1,21 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-import { getAuth } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-import { getFirestore } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+// Import the functions you need from the SDKs you need
+import { initializeApp } from "firebase/app";
+import { getAnalytics } from "firebase/analytics";
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
 
+// Your web app's Firebase configuration
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
-  apiKey: "AIzaSyCsn3iH_Pd7gZMjLRxesAQpWiz8yB1WCqk",
+  apiKey: "AIzaSyCsnI3H_Pd7gZMjLRxesAQpWi2y81WCqek",
   authDomain: "privatecameracapture.firebaseapp.com",
   projectId: "privatecameracapture",
-  storageBucket: "privatecameracapture.appspot.com",
-  messagingSenderId: "329207253992",
-  appId: "1:329207253992:web:6bb6b6bb54b7d8888252ed",
-  measurementId: "G-VF6F22ESHP"
+  storageBucket: "privatecameracapture.firebasestorage.app",
+  messagingSenderId: "322907235992",
+  appId: "1:322907235992:web:6bfb06bb54b7d8888252ed",
+  measurementId: "G-VF0F22ESHP"
 };
 
-export const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
-export const db = getFirestore(app);
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
