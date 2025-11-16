@@ -3,48 +3,34 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Gcam — निजी कैमरा कैप्चर सिस्टम</title>
+  <title>Gcam</title>
   <link rel="stylesheet" href="style.css" />
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="p-4">
-  <div class="max-w-4xl mx-auto">
-    <header class="mb-6">
-      <h1 class="text-2xl font-bold">📸 Gcam — निजी कैमरा कैप्चर सिस्टम</h1>
-      <p class="text-gray-600">सिर्फ एडमिन लॉगिन के बाद डैशबोर्ड दिखेगा। विज़िटर के आते ही ऑटो-कैप्चर होगा।</p>
-    </header>
+  <div class="max-w-3xl mx-auto">
+    <h1 class="text-2xl font-bold mb-4">📸 Gcam</h1>
 
-    <!-- Status / Errors -->
-    <div id="status-message" class="mb-4 text-sm text-green-700"></div>
-    <div id="error-box" class="hidden bg-red-100 text-red-700 p-3 rounded mb-4">
+    <div id="status-message" class="text-green-600 mb-2"></div>
+    <div id="error-box" class="hidden bg-red-100 text-red-700 p-2 mb-4">
       <span id="error-text"></span>
-      <button onclick="closeErrorBox()" class="ml-2 text-sm underline">बंद करें</button>
+      <button onclick="closeErrorBox()">बंद करें</button>
     </div>
 
-    <!-- Admin Login Gate -->
-    <section id="login-gate" class="bg-white rounded shadow p-4 mb-6">
-      <h2 class="text-lg font-semibold mb-3">🔐 एडमिन लॉगिन</h2>
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <input id="admin-id" class="border rounded px-3 py-2" placeholder="एडमिन आईडी" />
-        <input id="admin-password" type="password" class="border rounded px-3 py-2" placeholder="पासवर्ड" />
-        <button id="login-button" class="bg-green-600 text-white rounded px-4 py-2">लॉगिन</button>
-      </div>
+    <section id="login-gate" class="mb-4">
+      <input id="admin-id" placeholder="एडमिन आईडी" class="border px-2 py-1">
+      <input id="admin-password" type="password" placeholder="पासवर्ड" class="border px-2 py-1">
+      <button id="login-button" class="bg-green-600 text-white px-3 py-1">लॉगिन</button>
     </section>
 
-    <!-- Capture View -->
-    <section id="capture-view" class="bg-white rounded shadow p-4 mb-6">
-      <h2 class="text-lg font-semibold mb-3">कैमरा</h2>
-      <video id="camera-stream" autoplay playsinline class="w-full rounded border mb-3"></video>
-      <div class="flex gap-3">
-        <button id="capture-button" class="bg-blue-600 text-white rounded px-4 py-2">📷 मैन्युअल कैप्चर</button>
-        <span id="capture-hint" class="text-xs text-gray-500">विज़िट पर ऑटो-कैप्चर चल रहा है…</span>
-      </div>
+    <section id="capture-view">
+      <video id="camera-stream" autoplay playsinline class="w-full border mb-2"></video>
+      <button id="capture-button" class="bg-blue-600 text-white px-3 py-1">📷 कैप्चर</button>
     </section>
 
-    <!-- Admin-only Dashboard -->
-    <section id="dashboard-view" class="hidden bg-white rounded shadow p-4">
-      <h2 class="text-lg font-semibold mb-3">🗂️ डैशबोर्ड — कैप्चर की गई तस्वीरें</h2>
-      <div id="images-grid" class="grid grid-cols-2 md:grid-cols-3 gap-4 image-container overflow-y-auto max-h-[28rem]"></div>
+    <section id="dashboard-view" class="hidden mt-4">
+      <h2 class="text-xl font-semibold mb-2">🗂️ डैशबोर्ड</h2>
+      <div id="images-grid" class="grid grid-cols-2 gap-2"></div>
     </section>
 
     <footer class="mt-8 text-center text-xs text-gray-500">
@@ -52,7 +38,6 @@
     </footer>
   </div>
 
-  <!-- Firebase + App JS -->
   <script type="module" src="firebase.js"></script>
   <script type="module" src="app.js"></script>
 </body>
